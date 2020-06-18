@@ -1,6 +1,8 @@
 package duke
 
 import java.io.Closeable
+import java.io.File
+import java.io.FileOutputStream
 
 import org.apache.jena.tdb.TDBFactory
 import org.apache.jena.query.Dataset
@@ -54,6 +56,23 @@ class TDBConnector(val base: String) : Closeable {
         ds.end()
     }
 
+    fun exportData() {
+        logger.debug("exporting tdb data to ttl")
+        ds.begin(ReadWrite.READ)
+        TDB.getContext().setTrue(TDB.symUnionDefaultGraph)
+        val model = ds.getUnionModel()
+
+        val file = File("export.ttl");
+	val fos = FileOutputStream(file)
+        RDFDataMgr.write(fos, model, Lang.TURTLE)
+
+        model.close()
+        ds.end()
+
+        fos.flush()
+        fos.close()
+    }
+
     fun importFloridaData() {
         logger.debug("importing florida data")
         ds.begin(ReadWrite.WRITE)
@@ -100,6 +119,14 @@ fun importData(dataset: String) {
             "duke" -> c.importDukeData()
             else -> println("dataset must be one of (openvivo|duke|florida)")
         }
+    }
+}
+
+fun exportData(dataset: String) {
+    // NOTE: dataset in this case is folder
+    val connector = TDBConnector(dataset)
+    connector.use { c ->
+          c.exportData()
     }
 }
 
@@ -202,6 +229,7 @@ fun findOrgSparql(uri: String): String {
       PREFIX obo: <http://purl.obolibrary.org/obo/>
       
       SELECT * WHERE {
+         # NOTE: this is what's in scholars-discovery
          #<${uri}> vivo:relatedBy ?organization .
          <${uri}> vivo:relates ?organization .
          ?organization a foaf:Organization .
@@ -218,32 +246,6 @@ fun describeSparql(uri: String): String {
     return sparql
 }
 
-/*
-uri=http://openvivo.org/a/n10411
-@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
-@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix ns2:   <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> .
-@prefix ns1:   <http://vivoweb.org/ontology/core#> .
-@prefix ns4:   <http://www.w3.org/2006/vcard/ns#> .
-@prefix ns3:   <http://purl.org/ontology/bibo/> .
-@prefix ns6:   <http://aims.fao.org/aos/geopolitical.owl#> .
-@prefix ns5:   <http://purl.obolibrary.org/obo/> .
-@prefix ns8:   <http://xmlns.com/foaf/0.1/> .
-@prefix ns7:   <http://vitro.mannlib.cornell.edu/ns/vitro/public#> .
-@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix ns9:   <http://vivo.mydomain.edu/ns#> .
-@prefix xml:   <http://www.w3.org/XML/1998/namespace> .
-@prefix ns11:  <http://www.w3.org/2002/07/owl#> .
-@prefix ns10:  <http://purl.org/dc/terms/> .
-
-<http://openvivo.org/a/n10411>
-        a                     ns1:Position , ns5:BFO_0000001 , ns1:Relationship , ns1:LibrarianPosition , ns11:Thing , ns5:BFO_0000002 , ns5:BFO_0000020 ;
-        rdfs:label            "Head of Digital Collections & Preservation Systems" ;
-        ns2:mostSpecificType  ns1:LibrarianPosition ;
-        ns1:dateTimeInterval  <http://openvivo.org/a/n31076> ;
-        ns1:relates           <http://openvivo.org/a/grid.21729.3f> , <http://openvivo.org/a/orcid0000-0003-2588-3084> , <http://openvivo.org/a/grid.36425.36> .
-
- */
 fun listRelationships(dataset: String) {
     println("trying to run query: $dataset")
     val connector = TDBConnector(dataset)
@@ -255,7 +257,8 @@ fun listRelationships(dataset: String) {
 
         SELECT ?x
         WHERE {
-            ?x a vivo:Relationship .
+            #?x a vivo:Relationship .
+            ?x a vivo:Position .
         }
         #LIMIT 1000
     """
@@ -286,10 +289,10 @@ fun listRelationships(dataset: String) {
             qe3.context.set(TDB.symUnionDefaultGraph, true)
             val model = qe3.execDescribe()
             RDFDataMgr.write(System.out, model, Lang.TURTLE)
+            */
 
-             */
         }
-        //ResultSetFormatter.out(results)
+
     }
 }
 
@@ -302,11 +305,13 @@ fun main(args: Array<String>) {
         println("usage ./gradlew run --args='(openvivo|florida|duke)'")
         println("to import:")
         println("usage ./gradlew run --args='(openvivo|florida|duke) --import'")
-    } else if (args.size == 1) {
-        //    <{{uri}}> vivo:relatedBy ?organization .
+    } else if (args.size == 2 && args[1] == "--export") {
         //    ?organization a foaf:Organization .
         //listPeople(args[0])
-        listRelationships(args[0])
+        //listRelationships(args[0])
+        exportData(args[0])
+    } else if (args.size == 1) {
+         listRelationships(args[0])
     } else if (args.size == 2 && args[1] == "--import") {
         importData(args[0])
     }
